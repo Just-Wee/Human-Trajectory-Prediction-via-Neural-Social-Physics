@@ -34,10 +34,12 @@ if torch.cuda.is_available():
 print(device)
 
 with open("config/" + args.config_filename, 'r') as file:
-    try:
-        params = yaml.load(file, Loader = yaml.FullLoader)
-    except:
-        params = yaml.load(file)
+    # try:
+    #     params = yaml.load(file, Loader = yaml.FullLoader)
+    # except:
+    #     params = yaml.load(file)
+    params = yaml.load(file, Loader = yaml.FullLoader)
+
 file.close()
 print(params)
 
@@ -92,6 +94,7 @@ def train(path, scenes):
         hidden_states2 = hidden_states2.to(device)
         cell_states2 = cell_states2.to(device)
 
+        outputs_features1, outputs_features2, current_step, current_vel = None, None, None, None
         for m in range(1, params['past_length']):  #
             current_step = traj[:, m, :2]  # peds*2
             current_vel = traj[:, m, 2:]  # peds*2
@@ -210,6 +213,7 @@ def test(path, scenes, generated_goals, best_of_n = 1):
                 hidden_states2 = hidden_states2.to(device)
                 cell_states2 = cell_states2.to(device)
 
+                outputs_features1, outputs_features2, current_step, current_vel = None, None, None, None
                 for m in range(1, params['past_length']):  #
                     current_step = traj[:, m, :2]  # peds*2
                     current_vel = traj[:, m, 2:]  # peds*2
@@ -230,6 +234,7 @@ def test(path, scenes, generated_goals, best_of_n = 1):
                 alpha_step = torch.zeros(best_of_n, len(traj), 2).to(device)
                 for t in range(best_of_n):
                     alpha_recon = model_cvae.forward(x, device=device)
+                    assert not isinstance(alpha_recon, tuple)
                     alpha_step[t, :, :] = alpha_recon
                 alpha_step[-1,:,:] = torch.zeros_like(alpha_step[-1,:,:])
                 prediction_correct = alpha_step / params['data_scale'] + prediction
@@ -267,6 +272,7 @@ def test(path, scenes, generated_goals, best_of_n = 1):
                     alpha_step = torch.zeros(best_of_n, len(traj), 2).to(device)
                     for t in range(best_of_n):
                         alpha_recon = model_cvae.forward(x, device=device)
+                        assert not isinstance(alpha_recon, tuple)
                         alpha_step[t, :, :] = alpha_recon
                     alpha_step[-1, :, :] = torch.zeros_like(alpha_step[-1, :, :])
                     prediction_correct = alpha_step / params['data_scale'] + prediction

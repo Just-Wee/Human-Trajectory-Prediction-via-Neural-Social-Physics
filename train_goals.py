@@ -35,6 +35,7 @@ def train(train_batches):
         hidden_states = hidden_states.to(device)
         cell_states = cell_states.to(device)
 
+        outputs_features, current_step, current_vel = None, None, None
         for m in range(1, params['past_length']):  #
             current_step = traj[:, m, :2]  # peds*2
             current_vel = traj[:, m, 2:]  # peds*2
@@ -95,6 +96,7 @@ def test(traj, generated_goals):
         hidden_states = hidden_states.to(device)
         cell_states = cell_states.to(device)
 
+        outputs_features, current_step, current_vel = None, None, None
         for m in range(1, params['past_length']):  #
             current_step = traj[:, m, :2]  # peds*2
             current_vel = traj[:, m, 2:]  # peds*2
