@@ -3,3 +3,4 @@ data/SDD/
 .virtual_documents/
 .vscode/
 __pycache__/
+*.pyc

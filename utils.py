@@ -75,9 +75,8 @@ def calculate_loss_cvae(mean, log_var, criterion, future, predictions):
     # kl divergence loss
     KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
-
-
     return KLD, ADL_traj
+
 def translation_goals(goals, x_seq):
     first_frame = x_seq[:, 0, :]
     goals_translated = goals - first_frame #peds*2
