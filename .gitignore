@@ -4,3 +4,4 @@ data/SDD/
 .vscode/
 __pycache__/
 *.pyc
+log/

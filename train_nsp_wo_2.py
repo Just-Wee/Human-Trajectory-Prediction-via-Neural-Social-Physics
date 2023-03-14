@@ -281,6 +281,8 @@ def test(path, scenes, generated_goals, epoch=-1):
                     device
                 )
 
+                # debug
+                # t1 = time.time()
                 coefficients, curr_supp = model.forward_coefficient_people(
                     outputs_features2,
                     supplement[:, 7, :, :],
@@ -289,6 +291,11 @@ def test(path, scenes, generated_goals, epoch=-1):
                     device,
                 )  # peds*maxpeds*2, peds*(max_peds + 1)*4
 
+                # debug
+                # print('forward_coefficient_people time: %.2fs' % (time.time()-t1))
+
+                # debug
+                # t1 = time.time()
                 prediction, w_v = model.forward_next_step(
                     current_step,
                     current_vel,
@@ -310,6 +317,9 @@ def test(path, scenes, generated_goals, epoch=-1):
 
                 current_step = prediction  # peds*2
                 current_vel = w_v  # peds*2
+
+                # debug
+                # t1 = time.time()
 
                 for t in range(params['future_length'] - 1):
                     input_lstm = torch.cat((current_step, current_vel), dim=1)  # peds*4
@@ -362,11 +372,15 @@ def test(path, scenes, generated_goals, epoch=-1):
                         k_env,
                         device=device,
                     )
+                    # print('\tforward_next_step test time: %ds' % (time.time()-t11))
 
                     predictions[:, t + 1, :] = prediction
 
                     current_step = prediction  # peds*2
                     current_vel = w_v  # peds*2
+
+                # debug
+                # print('predict future time: %.2fs' % (time.time()-t1))
 
                 predictions = predictions.cpu().numpy()
                 dest = dest.cpu().numpy()
@@ -383,6 +397,8 @@ def test(path, scenes, generated_goals, epoch=-1):
                 predictions_20[j] = predictions
             ade_single = np.min(ade_20, axis=0)  # peds
             fde_single = np.min(fde_20, axis=0)  # peds
+            # print(ade_20)
+            # print(fde_20)
             all_ade.append(ade_single)
             all_fde.append(fde_single)
             all_traj.append(predictions_20)
