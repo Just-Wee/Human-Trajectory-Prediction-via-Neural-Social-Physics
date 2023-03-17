@@ -184,7 +184,7 @@ def test(path, scenes, generated_goals, epoch=-1):
 
     with torch.no_grad():
         tqdm_desc = 'Test %d' % epoch if epoch != -1 else ''
-        for scene in tqdm(scenes, desc=tqdm_desc):
+        for scene in tqdm(scenes[:2], desc=tqdm_desc):
         # for scene in scenes:
             load_name = path + scene
             with open(load_name, 'rb') as f:
@@ -394,10 +394,20 @@ def test(path, scenes, generated_goals, epoch=-1):
     return ade, fde
 
 
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+setup_seed(42)
+
 parser = argparse.ArgumentParser(description='NSP')
 
 parser.add_argument('--gpu_index', '-gi', type=int, default=0)
-parser.add_argument('--save_file', '-sf', type=str, default='SDD_nsp_wo_complete_1.pt')
+parser.add_argument('--save_file', '-sf', type=str, default='SDD_nsp_wo_complete_11.pt')
 parser.add_argument('--data_path', type=str, default='data/')
 parser.add_argument('--log_path', type=str, default='log/')
 
@@ -434,7 +444,7 @@ model = model.double().to(device)
 
 load_path = 'saved_models/SDD_goals.pt'
 checkpoint_trained = torch.load(load_path, map_location=torch.device(device))
-load_path_ini = 'saved_models/SDD_nsp_wo_ini.pt'
+load_path_ini = 'saved_models/SDD_nsp_wo_complete_1.pt'
 checkpoint_ini = torch.load(load_path_ini)
 checkpoint_dic = new_point(
     checkpoint_trained['model_state_dict'], checkpoint_ini['model_state_dict']
@@ -471,10 +481,9 @@ if not os.path.exists(args.log_path):
 writer = SummaryWriter(args.log_path)
 
 for e in range(params['num_epochs']):
-    total_loss = train(path_train, scenes_train, e)
+    # total_loss = train(path_train, scenes_train, e)
+    total_loss = 100
     test_ade, test_fde = test(path_test, scenes_test, goals, e)
-
-    print()
 
     if best_ade > test_ade:
         print("Epoch: ", e)

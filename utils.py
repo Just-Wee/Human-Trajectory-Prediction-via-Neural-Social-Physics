@@ -1,6 +1,8 @@
 import numpy as np
 import copy
 import torch
+
+
 def calculate_v(x_seq):
     length = x_seq.shape[1]
     peds = x_seq.shape[0]

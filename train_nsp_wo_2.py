@@ -14,6 +14,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from model_nsp_wo import *
 from utils import *
 from utils_1 import pickle_name_to_mask_name, get_goal_data
+from utils_2 import get_neighbors_info_with_prediction
 
 @logger.catch
 def train(path, scenes, epoch=-1):
@@ -29,7 +30,7 @@ def train(path, scenes, epoch=-1):
         with open(load_name, 'rb') as f:
             data = pickle.load(f)
         traj_complete, supplement, first_part = data[0], data[1], data[2]
-        traj_complete = np.array(traj_complete)
+        traj_complete = np.array(traj_complete) 
         if len(traj_complete.shape) == 1:
             continue
         first_frame = traj_complete[:, 0, :2]
@@ -115,6 +116,10 @@ def train(path, scenes, epoch=-1):
 
         current_step = prediction  # peds*2
         current_vel = w_v  # peds*2
+        cur_supplement = get_neighbors_info_with_prediction(
+            supplement, current_step, current_vel, params['past_length'], 
+            params['past_length'], first_frame, first_part
+        )
 
         for t in range(params['future_length'] - 1):
             input_lstm = torch.cat((current_step, current_vel), dim=1)  # peds*4
@@ -135,7 +140,8 @@ def train(path, scenes, epoch=-1):
 
             coefficients, curr_supp = model.forward_coefficient_people(
                 outputs_features2,
-                supplement[:, 7 + t + 1, :, :],
+                # supplement[:, 7 + t + 1, :, :],
+                cur_supplement,
                 current_step,
                 current_vel,
                 device,
@@ -159,6 +165,11 @@ def train(path, scenes, epoch=-1):
 
             current_step = prediction  # peds*2
             current_vel = w_v  # peds*2
+            cur_supplement = get_neighbors_info_with_prediction(
+                supplement, current_step, current_vel, params['past_length'], 
+                params['past_length']+t+1, first_frame, first_part
+            )
+            
         optimizer.zero_grad()
 
         loss = calculate_loss(criterion, future, predictions)
@@ -190,10 +201,6 @@ def test(path, scenes, generated_goals, epoch=-1):
             with open(load_name, 'rb') as f:
                 data = pickle.load(f)
 
-            # debug
-            # file_size = os.path.getsize(load_name)
-            # print('Scene %s size: %d' % (scene, file_size))
-
             traj_complete, supplement, first_part = data[0], data[1], data[2]
             traj_complete = np.array(traj_complete)
             if len(traj_complete.shape) == 1:
@@ -217,11 +224,11 @@ def test(path, scenes, generated_goals, epoch=-1):
                 device
             )  # peds*2
             num_peds = traj.shape[0]
-            ade_20 = np.zeros((20, len(traj_complete)))
-            fde_20 = np.zeros((20, len(traj_complete)))
-            predictions_20 = np.zeros((20, num_peds, params['future_length'], 2))
+            ade_rep_list = np.zeros((args.rep_num, len(traj_complete)))
+            fde_rep_list = np.zeros((args.rep_num, len(traj_complete)))
+            predictions_rep_list = np.zeros((args.rep_num, num_peds, params['future_length'], 2))
 
-            for j in range(20):
+            for j in range(args.rep_num):
                 # index_goals = generated_goals[2].index(scene)
                 # goals_translated = translation_goals(
                 #     generated_goals[1][i - index][j, :, :], traj_complete[:, :, :2]
@@ -277,12 +284,8 @@ def test(path, scenes, generated_goals, epoch=-1):
                         cell_states2,
                     )
 
-                predictions = torch.zeros(num_peds, params['future_length'], 2).to(
-                    device
-                )
+                predictions = torch.zeros(num_peds, params['future_length'], 2).to(device)
 
-                # debug
-                # t1 = time.time()
                 coefficients, curr_supp = model.forward_coefficient_people(
                     outputs_features2,
                     supplement[:, 7, :, :],
@@ -291,11 +294,6 @@ def test(path, scenes, generated_goals, epoch=-1):
                     device,
                 )  # peds*maxpeds*2, peds*(max_peds + 1)*4
 
-                # debug
-                # print('forward_coefficient_people time: %.2fs' % (time.time()-t1))
-
-                # debug
-                # t1 = time.time()
                 prediction, w_v = model.forward_next_step(
                     current_step,
                     current_vel,
@@ -310,16 +308,15 @@ def test(path, scenes, generated_goals, epoch=-1):
                     k_env,
                     device=device,
                 )
-                # debug
-                # print('forward_next_step time: %.2fs' % (time.time()-t1))
 
                 predictions[:, 0, :] = prediction
 
                 current_step = prediction  # peds*2
                 current_vel = w_v  # peds*2
-
-                # debug
-                # t1 = time.time()
+                cur_supplement = get_neighbors_info_with_prediction(
+                    supplement, current_step, current_vel, params['past_length'], 
+                    params['past_length'], first_frame, first_part
+                )
 
                 for t in range(params['future_length'] - 1):
                     input_lstm = torch.cat((current_step, current_vel), dim=1)  # peds*4
@@ -342,22 +339,25 @@ def test(path, scenes, generated_goals, epoch=-1):
                     future_vel_norm = torch.norm(future_vel, dim=-1)  # peds
                     initial_speeds = torch.unsqueeze(future_vel_norm, dim=-1)  # peds*1
 
-                    # debug
-                    # t11 = time.time()
                     # DONE: 测试时使用了 GT，需修改
-                    coefficients, current_supplement = model.forward_coefficient_test(
+                    # coefficients, current_supplement = model.forward_coefficient_test(
+                    #     outputs_features2,
+                    #     supplement[:, 7, :, :],
+                    #     current_step,
+                    #     current_vel,
+                    #     first_part,
+                    #     first_frame,
+                    #     device=device,
+                    # )
+                    coefficients, curr_supp = model.forward_coefficient_people(
                         outputs_features2,
-                        supplement[:, 7, :, :],
+                        # supplement[:, 7 + t + 1, :, :],
+                        cur_supplement, 
                         current_step,
                         current_vel,
-                        first_part,
-                        first_frame,
-                        device=device,
+                        device,
                     )
-                    # print('\tforward_coefficient_test time: %ds' % (time.time()-t11))
 
-                    # debug
-                    # t11 = time.time()
                     prediction, w_v = model.forward_next_step(
                         current_step,
                         current_vel,
@@ -372,15 +372,15 @@ def test(path, scenes, generated_goals, epoch=-1):
                         k_env,
                         device=device,
                     )
-                    # print('\tforward_next_step test time: %ds' % (time.time()-t11))
 
                     predictions[:, t + 1, :] = prediction
 
                     current_step = prediction  # peds*2
                     current_vel = w_v  # peds*2
-
-                # debug
-                # print('predict future time: %.2fs' % (time.time()-t1))
+                    cur_supplement = get_neighbors_info_with_prediction(
+                        supplement, current_step, current_vel, params['past_length'], 
+                        params['past_length']+t+1, first_frame, first_part
+                    )
 
                 predictions = predictions.cpu().numpy()
                 dest = dest.cpu().numpy()
@@ -392,16 +392,14 @@ def test(path, scenes, generated_goals, epoch=-1):
                 test_fde = np.linalg.norm(
                     (y[:, -1, :] - predictions[:, -1, :]), axis=1
                 )  # peds
-                ade_20[j, :] = test_ade
-                fde_20[j, :] = test_fde
-                predictions_20[j] = predictions
-            ade_single = np.min(ade_20, axis=0)  # peds
-            fde_single = np.min(fde_20, axis=0)  # peds
-            # print(ade_20)
-            # print(fde_20)
+                ade_rep_list[j, :] = test_ade
+                fde_rep_list[j, :] = test_fde
+                predictions_rep_list[j] = predictions
+            ade_single = np.min(ade_rep_list, axis=0)  # peds
+            fde_single = np.min(fde_rep_list, axis=0)  # peds
             all_ade.append(ade_single)
             all_fde.append(fde_single)
-            all_traj.append(predictions_20)
+            all_traj.append(predictions_rep_list)
             all_scenes.append(scene)
 
             # print('test finish:', i)
@@ -410,12 +408,26 @@ def test(path, scenes, generated_goals, epoch=-1):
     return ade, fde
 
 
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True # type: ignore
+
+
+setup_seed(42)
+
+# Debug
+# os.environ['CUDA_VISBLE_DEVICES'] = '2'
+
 parser = argparse.ArgumentParser(description='NSP')
 
 parser.add_argument('--gpu_index', '-gi', type=int, default=0)
-parser.add_argument('--save_file', '-sf', type=str, default='SDD_nsp_wo_complete_1.pt')
+parser.add_argument('--save_file', '-sf', type=str, default='SDD_nsp_wo_complete_2.pt')
 parser.add_argument('--data_path', type=str, default='data/')
 parser.add_argument('--log_path', type=str, default='log/')
+parser.add_argument('--rep_num', type=int, default=20, help='number of repeats in prediction')
 
 args = parser.parse_args()
 
@@ -486,8 +498,11 @@ if not os.path.exists(args.log_path):
 
 writer = SummaryWriter(args.log_path)
 
+print(args)
+
 for e in range(params['num_epochs']):
     total_loss = train(path_train, scenes_train, e)
+    # total_loss = 100
     test_ade, test_fde = test(path_test, scenes_test, goals, e)
 
     print()
@@ -508,9 +523,9 @@ for e in range(params['num_epochs']):
         )
         print("Saved model to:\n{}".format(save_path))
 
-    writer.add_scalar('train_loss', total_loss)
-    writer.add_scalar('ADE', test_ade)
-    writer.add_scalar('FDE', test_fde)
+    writer.add_scalar('train_loss', total_loss, e)
+    writer.add_scalar('ADE', test_ade, e)
+    writer.add_scalar('FDE', test_fde, e)
 
     print('epoch:', e)
     print('k_env:', k_env)
